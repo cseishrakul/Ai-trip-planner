@@ -8,6 +8,19 @@ import {
   SelectTravelesList,
 } from "@/constants/option";
 import { chatSession } from "@/service/AiModal";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { FcGoogle } from "react-icons/fc";
+import { useGoogleLogin } from "@react-oauth/google";
+import { doc, setDoc } from "firebase/firestore";
+import { db } from "@/service/FirebaseConfig";
+import { LuLoaderCircle } from "react-icons/lu";
 
 const CreateTrip = () => {
   const [query, setQuery] = useState("");
@@ -16,6 +29,8 @@ const CreateTrip = () => {
   const [days, setDays] = useState("");
   const [selectedBudget, setSelectedBudget] = useState(null);
   const [selectedTravelWith, setSelectedTravelWith] = useState(null);
+  const [openDialog, setOpendialog] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const handleChange = (e) => {
     const value = e.target.value;
@@ -46,8 +61,23 @@ const CreateTrip = () => {
     setSuggestions([]);
   };
 
+  const login = useGoogleLogin({
+    onSuccess: (codeResp) => {
+      console.log(codeResp);
+      GetUserProfile(codeResp);
+    },
+    onError: (error) => console.log(error),
+  });
+
   const handleSubmit = async (e) => {
-    e.preventDefault();
+    if (e) e.preventDefault();
+
+    const user = localStorage.getItem("user");
+    if (!user) {
+      setOpendialog(true);
+      return;
+    }
+
     if (!selectedPlace) {
       alert("Please select a location from suggestions");
       return;
@@ -57,6 +87,7 @@ const CreateTrip = () => {
       return;
     }
 
+    setLoading(true);
     const FINAL_PROMPT = AI_PROMPT.replace(
       "{location}",
       selectedPlace.display_name
@@ -75,6 +106,49 @@ const CreateTrip = () => {
     // console.log("Final Prompt to send to AI:", FINAL_PROMPT);
     const result = await chatSession.sendMessage(FINAL_PROMPT);
     console.log(result?.response?.text());
+    SaveAiTrip(result?.response?.text());
+    setLoading(false);
+  };
+
+  const GetUserProfile = (tokenInfo) => {
+    axios
+      .get(
+        `https://www.googleapis.com/oauth2/v1/userinfo?access_token=${tokenInfo?.access_token}`,
+        {
+          headers: {
+            Authorization: `Bearer ${tokenInfo?.access_token}`,
+            Accept: "Application/json",
+          },
+        }
+      )
+      .then((res) => {
+        console.log("User info:", res.data);
+        localStorage.setItem("user", JSON.stringify(res.data));
+        setOpendialog(false);
+        handleSubmit();
+      })
+      .catch((error) => {
+        console.error("Error fetching user info", error);
+      });
+  };
+
+  const SaveAiTrip = async (TripData) => {
+    setLoading(true);
+    const user = JSON.parse(localStorage.getItem("user"));
+    const docId = Date.now().toString();
+
+    await setDoc(doc(db, "AiTrips", docId), {
+      userSelection: {
+        location: selectedPlace,
+        days,
+        budget: selectedBudget,
+        travelWith: selectedTravelWith,
+      },
+      tripData: JSON.parse(TripData),
+      useEmail: user?.email,
+      id: docId,
+    });
+    setLoading(false);
   };
 
   return (
@@ -165,10 +239,36 @@ const CreateTrip = () => {
           </div>
         </div>
 
-        <Button type="submit" className="cursor-pointer mb-10">
-          {" "}
-          Generate Trip{" "}
-        </Button>
+        {loading ? (
+          <LuLoaderCircle className="h-7 w-7 animate-spin" />
+        ) : (
+          <Button type="submit" className="cursor-pointer mb-10">
+            {" "}
+            Generate Trip{" "}
+          </Button>
+        )}
+
+        <Dialog open={openDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogDescription>
+                <h3 className="font-bold text-emerald-700">Ai Trip Planner</h3>
+                <h2 className="font-bold text-lg mt-7">Sign in with Google</h2>
+                <p className="font-bold">
+                  {" "}
+                  Sign in to the app with Google Authentication{" "}
+                </p>
+                <Button
+                  onClick={login}
+                  className="w-full mt-5 flex gap-4 items-center cursor-pointer"
+                >
+                  {" "}
+                  <FcGoogle /> Sign in with google{" "}
+                </Button>
+              </DialogDescription>
+            </DialogHeader>
+          </DialogContent>
+        </Dialog>
       </form>
     </div>
   );
