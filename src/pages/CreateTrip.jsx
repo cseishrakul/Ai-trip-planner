@@ -21,6 +21,7 @@ import { useGoogleLogin } from "@react-oauth/google";
 import { doc, setDoc } from "firebase/firestore";
 import { db } from "@/service/FirebaseConfig";
 import { LuLoaderCircle } from "react-icons/lu";
+import { useNavigate } from "react-router-dom";
 
 const CreateTrip = () => {
   const [query, setQuery] = useState("");
@@ -31,6 +32,7 @@ const CreateTrip = () => {
   const [selectedTravelWith, setSelectedTravelWith] = useState(null);
   const [openDialog, setOpendialog] = useState(false);
   const [loading, setLoading] = useState(false);
+  const navigate = useNavigate()
 
   const handleChange = (e) => {
     const value = e.target.value;
@@ -149,6 +151,7 @@ const CreateTrip = () => {
       id: docId,
     });
     setLoading(false);
+    navigate('/view-trip/'+docId)
   };
 
   return (
